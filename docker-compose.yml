@@ -1,0 +1,97 @@
+# =============================================================================
+# Malaria Drug Resistance Intelligence Platform
+# Full Stack Docker Compose
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Frontend - React + Vite
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - malaria-network
+
+  # ===========================================================================
+  # Backend - FastAPI
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql://malaria:malaria_password@db:5432/malaria_db
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - malaria-network
+
+  # ===========================================================================
+  # Database - PostgreSQL with PostGIS
+  # ===========================================================================
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=malaria
+      - POSTGRES_PASSWORD=malaria_password
+      - POSTGRES_DB=malaria_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - malaria-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malaria -d malaria_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # Redis - Caching & Task Queue
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - malaria-network
+
+networks:
+  malaria-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
