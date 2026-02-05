@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   MapPin, TrendingUp, TrendingDown, AlertTriangle, Activity, 
   Globe, Microscope, Filter, Download, Building, RefreshCcw, Info, BarChart3,
-  Wifi, WifiOff
+  Wifi, WifiOff, FileText, Link2, Twitter, Linkedin, Copy, Check, X
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +52,10 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
   const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string>('all');
   const [mapCenter] = useState<[number, number]>([0, 20]);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showFullReport, setShowFullReport] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   // Fetch data from API with fallback to local data
   const { data, loading, error, isOnline, refetch } = useAppData();
@@ -75,6 +79,237 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
   // Filter ACT drugs for chart
   const actDrugs = useMemo(() => drugs.filter(d => d.type === 'ACT'), [drugs]);
 
+  // Handle refresh
+  const handleRefresh = async () => {
+    await refetch();
+  };
+
+  // Export functions
+  const handleExportPDF = () => {
+    // Generate report content
+    const reportContent = generateReportContent();
+    
+    // Create a new window for printing/PDF
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Malaria Drug Resistance Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; }
+            h1 { color: #1e40af; }
+            h2 { color: #374151; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; }
+            .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }
+            .stat-card { background: #f3f4f6; padding: 16px; border-radius: 8px; }
+            .stat-value { font-size: 24px; font-weight: bold; color: #1f2937; }
+            .stat-label { font-size: 12px; color: #6b7280; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; }
+            th { background: #3b82f6; color: white; }
+            .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          ${reportContent}
+          <div class="footer">
+            <p><strong>Disclaimer:</strong> This report is for surveillance and research purposes only.</p>
+            <p>Generated on ${new Date().toLocaleString()} | Developed by Mike Sanga (mykiie85@gmail.com)</p>
+          </div>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+    setShowExportMenu(false);
+  };
+
+  const generateReportContent = () => {
+    return `
+      <h1>🦟 Malaria Drug Resistance Intelligence Report</h1>
+      <p>Region: ${selectedRegion === 'all' ? 'All Sub-Saharan Africa' : selectedRegion.charAt(0).toUpperCase() + selectedRegion.slice(1) + ' Africa'}</p>
+      
+      <h2>Summary Statistics</h2>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value">${summaryStats.totalCountries}</div>
+          <div class="stat-label">Countries Monitored</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${summaryStats.highRiskCount}</div>
+          <div class="stat-label">High Risk Areas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${summaryStats.avgEfficacy.toFixed(1)}%</div>
+          <div class="stat-label">Average ACT Efficacy</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${formatNumber(summaryStats.totalCases)}</div>
+          <div class="stat-label">Total Cases (2023)</div>
+        </div>
+      </div>
+      
+      <h2>Country-Level Data</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Country</th>
+            <th>Region</th>
+            <th>Risk Level</th>
+            <th>ACT Efficacy</th>
+            <th>Cases (2023)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredCountries.map(c => `
+            <tr>
+              <td>${c.name}</td>
+              <td>${c.region.charAt(0).toUpperCase() + c.region.slice(1)} Africa</td>
+              <td style="color: ${getResistanceColor(c.resistanceLevel)}">${c.resistanceLevel.toUpperCase()}</td>
+              <td>${c.efficacyRate}%</td>
+              <td>${formatNumber(c.cases2023)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  };
+
+  const handleCopyLink = async () => {
+    const url = window.location.href;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    setShowExportMenu(false);
+  };
+
+  const handleShareTwitter = () => {
+    const text = `Exploring malaria drug resistance data across Sub-Saharan Africa. Check out this surveillance dashboard!`;
+    const url = window.location.href;
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank');
+    setShowExportMenu(false);
+  };
+
+  const handleShareLinkedIn = () => {
+    const url = window.location.href;
+    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, '_blank');
+    setShowExportMenu(false);
+  };
+
+  // Full report modal for selected country
+  const renderFullReport = () => {
+    if (!selectedCountry || !showFullReport) return null;
+    
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        onClick={() => setShowFullReport(false)}
+      >
+        <motion.div 
+          initial={{ scale: 0.9 }}
+          animate={{ scale: 1 }}
+          className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-auto"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold">{selectedCountry.name} - Full Report</h2>
+            <Button variant="ghost" size="sm" onClick={() => setShowFullReport(false)}>
+              <X className="w-5 h-5" />
+            </Button>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            {/* Overview */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">Overview</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">Region</p>
+                  <p className="text-lg font-semibold">{selectedCountry.region.charAt(0).toUpperCase() + selectedCountry.region.slice(1)} Africa</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">Risk Level</p>
+                  <p className="text-lg font-semibold" style={{ color: getResistanceColor(selectedCountry.resistanceLevel) }}>
+                    {selectedCountry.resistanceLevel.toUpperCase()}
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">ACT Efficacy</p>
+                  <p className="text-lg font-semibold">{selectedCountry.efficacyRate}%</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">Cases (2023)</p>
+                  <p className="text-lg font-semibold">{formatNumber(selectedCountry.cases2023)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">Deaths (2023)</p>
+                  <p className="text-lg font-semibold">{formatNumber(selectedCountry.deaths2023)}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-sm text-slate-500">Last Survey</p>
+                  <p className="text-lg font-semibold">{selectedCountry.lastSurvey}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Treatment Policy */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">National Treatment Policy</h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800">{selectedCountry.treatmentPolicy}</p>
+              </div>
+            </div>
+
+            {/* Molecular Markers */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">Molecular Markers</h3>
+              <div className="space-y-3">
+                {selectedCountry.molecularMarkers.map((marker, idx) => (
+                  <div key={idx} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">{marker.name}</span>
+                      <Badge variant={marker.significance === 'validated' ? 'default' : 'secondary'}>
+                        {marker.significance}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Prevalence:</span>
+                        <span className="font-semibold">{marker.prevalence}%</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Trend:</span>
+                        {getTrendIcon(marker.trend)}
+                        <span>{marker.trend}</span>
+                      </div>
+                    </div>
+                    <Progress value={marker.prevalence} className="mt-2 h-2" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button onClick={() => { setShowFullReport(false); onNavigate('prediction'); }} className="flex-1">
+                Run ML Prediction
+              </Button>
+              <Button variant="outline" onClick={handleExportPDF}>
+                <FileText className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  };
+
   return (
     <TooltipProvider>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -85,15 +320,15 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
           className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6"
         >
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Surveillance Dashboard</h2>
-            <p className="text-slate-500 text-sm mt-1 flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Surveillance Dashboard</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 flex items-center gap-2">
               Real-time drug resistance monitoring across Sub-Saharan Africa
               {isOnline ? (
-                <Badge variant="outline" className="text-green-600 border-green-300">
+                <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
                   <Wifi className="w-3 h-3 mr-1" /> Live
                 </Badge>
               ) : (
-                <Badge variant="outline" className="text-amber-600 border-amber-300">
+                <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
                   <WifiOff className="w-3 h-3 mr-1" /> Offline
                 </Badge>
               )}
@@ -113,14 +348,66 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
                 <SelectItem value="south">Southern Africa</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={refetch} disabled={loading}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh} 
+              disabled={loading}
+              className="min-w-[100px]"
+            >
               <RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              {loading ? 'Loading...' : 'Refresh'}
             </Button>
-            <Button variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            
+            {/* Export Dropdown */}
+            <div className="relative" ref={exportRef}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowExportMenu(!showExportMenu)}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+              
+              {showExportMenu && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-2 z-50"
+                >
+                  <button 
+                    onClick={handleExportPDF}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Export as PDF
+                  </button>
+                  <button 
+                    onClick={handleCopyLink}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Link2 className="w-4 h-4" />}
+                    {copied ? 'Copied!' : 'Copy Link'}
+                  </button>
+                  <hr className="my-2 border-slate-200 dark:border-slate-700" />
+                  <button 
+                    onClick={handleShareTwitter}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <Twitter className="w-4 h-4" />
+                    Share on Twitter
+                  </button>
+                  <button 
+                    onClick={handleShareLinkedIn}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <Linkedin className="w-4 h-4" />
+                    Share on LinkedIn
+                  </button>
+                </motion.div>
+              )}
+            </div>
           </div>
         </motion.div>
 
@@ -304,14 +591,14 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-50 rounded-lg p-3">
+                        <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
                           <p className="text-xs text-slate-500">ACT Efficacy</p>
-                          <p className="text-xl font-bold text-slate-800">{selectedCountry.efficacyRate}%</p>
+                          <p className="text-xl font-bold text-slate-800 dark:text-white">{selectedCountry.efficacyRate}%</p>
                           <Progress value={selectedCountry.efficacyRate} className="mt-1 h-1" />
                         </div>
-                        <div className="bg-slate-50 rounded-lg p-3">
+                        <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
                           <p className="text-xs text-slate-500">Cases (2023)</p>
-                          <p className="text-xl font-bold text-slate-800">{formatNumber(selectedCountry.cases2023)}</p>
+                          <p className="text-xl font-bold text-slate-800 dark:text-white">{formatNumber(selectedCountry.cases2023)}</p>
                         </div>
                       </div>
 
@@ -322,7 +609,7 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
                         </h4>
                         <div className="space-y-2">
                           {selectedCountry.molecularMarkers.map((marker, idx) => (
-                            <div key={idx} className="bg-slate-50 rounded-lg p-2">
+                            <div key={idx} className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium">{marker.name}</span>
                                 <div className="flex items-center gap-2">
@@ -343,7 +630,7 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
 
                       <div>
                         <h4 className="font-semibold text-sm mb-2">Treatment Policy</h4>
-                        <p className="text-sm text-slate-600 bg-blue-50 rounded-lg p-3">
+                        <p className="text-sm text-slate-600 dark:text-slate-300 bg-blue-50 dark:bg-blue-900/30 rounded-lg p-3">
                           {selectedCountry.treatmentPolicy}
                         </p>
                       </div>
@@ -352,7 +639,12 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
                         <Button size="sm" className="flex-1" onClick={() => onNavigate('prediction')}>
                           Run Prediction
                         </Button>
-                        <Button variant="outline" size="sm" className="flex-1">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => setShowFullReport(true)}
+                        >
                           Full Report
                         </Button>
                       </div>
@@ -475,6 +767,9 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
             </div>
           </div>
         </motion.div>
+
+        {/* Full Report Modal */}
+        {renderFullReport()}
       </div>
     </TooltipProvider>
   );
