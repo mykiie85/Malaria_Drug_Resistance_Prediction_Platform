@@ -1,0 +1,81 @@
+# =============================================================================
+# Malaria Drug Resistance Intelligence Platform
+# Production Docker Compose (VPS, no domain — accessed via IP:PORT)
+# =============================================================================
+# Usage:
+#   cp .env.production.example .env
+#   # edit .env with real secrets, then:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        - VITE_API_URL=
+    ports:
+      - "${FRONTEND_PORT:-8090}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - malaria-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://malaria:${POSTGRES_PASSWORD}@db:5432/malaria_db
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - malaria-network
+    # No host port published: only reachable from other containers on
+    # malaria-network (frontend's nginx proxies /api/ to it).
+
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    environment:
+      - POSTGRES_USER=malaria
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=malaria_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - malaria-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malaria -d malaria_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port published: not reachable from outside the VPS.
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - malaria-network
+    # No host port published: not reachable from outside the VPS.
+
+networks:
+  malaria-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

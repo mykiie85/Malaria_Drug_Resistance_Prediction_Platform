@@ -2,12 +2,20 @@
 Malaria Drug Resistance Intelligence Platform - FastAPI Backend
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 # Import routers from api/v1
 from app.api.v1 import health, reports, drugs, markers, dashboard, predictions, gis
+
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+    if origin.strip()
+]
 
 
 @asynccontextmanager
@@ -28,12 +36,7 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://frontend:5173",
-        "*",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
