@@ -57,6 +57,49 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
+// Open a printable window (which the browser can "Save as PDF") with the given
+// report body. Dependency-free — no jsPDF/html2canvas needed.
+const printReport = (title: string, bodyHtml: string) => {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('Please allow pop-ups for this site to export the report.');
+    return;
+  }
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 40px; color: #1f2937; }
+        h1 { color: #1e40af; }
+        h2 { color: #374151; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-top: 28px; }
+        h3 { color: #374151; margin-top: 20px; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }
+        .stat-card { background: #f3f4f6; padding: 16px; border-radius: 8px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #1f2937; }
+        .stat-label { font-size: 12px; color: #6b7280; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #e5e7eb; padding: 12px; text-align: left; font-size: 13px; }
+        th { background: #3b82f6; color: white; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
+        @media print { body { padding: 20px; } }
+      </style>
+    </head>
+    <body>
+      ${bodyHtml}
+      <div class="footer">
+        <p><strong>Disclaimer:</strong> This report is for surveillance and research purposes only. Not for clinical decision-making.</p>
+        <p>Generated on ${new Date().toLocaleString()} | Developed by Mike Sanga (mykiie85@gmail.com)</p>
+      </div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+};
+
 // Region data for the GeoJSON overlay
 const regions = [
   { id: 'east', name: 'East Africa', color: '#3b82f6' },
@@ -130,6 +173,56 @@ function CountryFullReport({
       { year: '2023', efficacy: base, resistance: 100 - base },
     ];
   }, [country]);
+
+  // Export this country's full report to a printable / PDF window.
+  const handleExportCountryReport = () => {
+    const reportContent = `
+      <h1>🦟 ${country.name} — Full Drug Resistance Report</h1>
+      <p>Region: ${country.region.charAt(0).toUpperCase() + country.region.slice(1)} Africa &nbsp;|&nbsp; Last survey: ${country.lastSurvey}</p>
+
+      <h2>Overview</h2>
+      <div class="stats">
+        <div class="stat-card"><div class="stat-value" style="color:${getResistanceColor(country.resistanceLevel)}">${country.resistanceLevel.toUpperCase()}</div><div class="stat-label">Resistance Level</div></div>
+        <div class="stat-card"><div class="stat-value">${country.efficacyRate}%</div><div class="stat-label">ACT Efficacy</div></div>
+        <div class="stat-card"><div class="stat-value">${formatNumber(country.cases2023)}</div><div class="stat-label">Cases (2023)</div></div>
+        <div class="stat-card"><div class="stat-value">${formatNumber(country.deaths2023)}</div><div class="stat-label">Deaths (2023)</div></div>
+      </div>
+
+      <h3>Treatment Policy</h3>
+      <p>${country.treatmentPolicy}</p>
+
+      <h2>Molecular Markers</h2>
+      <table>
+        <thead>
+          <tr><th>Marker</th><th>Prevalence</th><th>Trend</th><th>Significance</th></tr>
+        </thead>
+        <tbody>
+          ${country.molecularMarkers.map(m => `
+            <tr>
+              <td>${m.name}</td>
+              <td>${m.prevalence}%</td>
+              <td>${m.trend}</td>
+              <td>${m.significance}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <h2>Efficacy / Resistance Trend</h2>
+      <table>
+        <thead>
+          <tr><th>Year</th><th>Efficacy</th><th>Resistance</th></tr>
+        </thead>
+        <tbody>
+          ${countryTrend.map(t => `
+            <tr><td>${t.year}</td><td>${t.efficacy.toFixed(1)}%</td><td>${t.resistance.toFixed(1)}%</td></tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    printReport(`${country.name} — Full Report`, reportContent);
+  };
 
   return (
     // CRITICAL FIX: fixed inset-0 with z-[100] to overlay EVERYTHING including the sticky header
@@ -412,7 +505,7 @@ function CountryFullReport({
                 <Activity className="w-4 h-4 mr-2" />
                 Run Prediction for {country.name}
               </Button>
-              <Button variant="outline" className="flex-1 gap-2">
+              <Button variant="outline" className="flex-1 gap-2" onClick={handleExportCountryReport}>
                 <Download className="w-4 h-4" />
                 Export Report (PDF)
               </Button>
@@ -479,6 +572,47 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
     dashArray: '3',
     fillOpacity: 0.1,
   });
+
+  // Export the region-wide surveillance report to a printable / PDF window.
+  const handleExportRegionReport = () => {
+    const regionLabel = selectedRegion === 'all'
+      ? 'All Sub-Saharan Africa'
+      : `${selectedRegion.charAt(0).toUpperCase() + selectedRegion.slice(1)} Africa`;
+
+    const reportContent = `
+      <h1>🦟 Malaria Drug Resistance Intelligence Report</h1>
+      <p>Region: ${regionLabel}</p>
+
+      <h2>Summary Statistics</h2>
+      <div class="stats">
+        <div class="stat-card"><div class="stat-value">${summaryStats.totalCountries}</div><div class="stat-label">Countries Monitored</div></div>
+        <div class="stat-card"><div class="stat-value">${summaryStats.highRiskCount}</div><div class="stat-label">High Risk Areas</div></div>
+        <div class="stat-card"><div class="stat-value">${summaryStats.avgEfficacy.toFixed(1)}%</div><div class="stat-label">Average ACT Efficacy</div></div>
+        <div class="stat-card"><div class="stat-value">${formatNumber(summaryStats.totalCases)}</div><div class="stat-label">Total Cases (2023)</div></div>
+      </div>
+
+      <h2>Country-Level Data</h2>
+      <table>
+        <thead>
+          <tr><th>Country</th><th>Region</th><th>Risk Level</th><th>ACT Efficacy</th><th>Cases (2023)</th><th>Deaths (2023)</th></tr>
+        </thead>
+        <tbody>
+          ${filteredCountries.map(c => `
+            <tr>
+              <td>${c.name}</td>
+              <td>${c.region.charAt(0).toUpperCase() + c.region.slice(1)} Africa</td>
+              <td style="color: ${getResistanceColor(c.resistanceLevel)}; font-weight: bold;">${c.resistanceLevel.toUpperCase()}</td>
+              <td>${c.efficacyRate}%</td>
+              <td>${formatNumber(c.cases2023)}</td>
+              <td>${formatNumber(c.deaths2023)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    printReport('Malaria Drug Resistance Report', reportContent);
+  };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
@@ -561,7 +695,7 @@ export default function ReportLayer({ isActive, onNavigate }: ReportLayerProps) 
                       <SelectItem value="cases">Case Burden</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" size="icon">
+                  <Button variant="outline" size="icon" onClick={handleExportRegionReport} title="Export region report (PDF)">
                     <Download className="w-4 h-4" />
                   </Button>
                 </div>
